@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Bear Bot</title>
+<link rel="preload" href="fonts/fira-800-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/fira-800i-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="app.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+(function () {
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (!tg) return;
+  var at = function (v) { try { return !!tg.isVersionAtLeast(v); } catch (e) { return false; } };
+  var run = function (f) { try { f(); } catch (e) {} };
+  run(function () { tg.expand(); });
+  run(function () { tg.setHeaderColor(at("6.9") ? "#131319" : "bg_color"); });
+  run(function () { tg.setBackgroundColor("#131319"); });
+  if (at("7.10")) run(function () { tg.setBottomBarColor("#131319"); });
+  if (at("7.7")) run(function () { tg.disableVerticalSwipes(); });
+  if (/^(ios|android)/.test(tg.platform || "") && at("8.0")) {
+    run(function () { if (!tg.isFullscreen) tg.requestFullscreen(); });
+    run(function () { if (window.innerHeight > window.innerWidth) tg.lockOrientation(); });
+  } else if (at("8.0")) {
+    run(function () { if (tg.isFullscreen) tg.exitFullscreen(); });
+  }
+})();
+</script>
+<script src="vendor/pako.min.js"></script>
+</head>
+<body>
+<section id="splash" class="screen" hidden>
+  <div class="splash-center">
+    <div id="splash-wheel" class="mini-wheel"></div>
+    <div class="splash-title accent-text">НЕДОСТУПНО</div>
+    <div class="splash-sub">Сначала нужно пройти капчу в&nbsp;боте!</div>
+  </div>
+  <div class="bottom-bar">
+    <button id="btn-open-bot" class="btn btn-primary">Открыть бота</button>
+  </div>
+</section>
+<section id="main" class="screen" hidden>
+  <canvas id="sparkles" class="sparkles" aria-hidden="true"></canvas>
+  <header class="top">
+    <div class="titles">
+      <div class="h1 accent-text">КРУТИ КОЛЕСО</div>
+      <div class="sub">И выигрывай подарки бесплатно</div>
+    </div>
+  </header>
+  <div class="sp sp-a"></div>
+  <div class="wheel-zone">
+    <div class="wheel-wrap">
+      <div id="wheel" class="wheel"></div>
+      <img id="wheel-frame" class="wheel-frame" src="assets/wheel-frame.svg?v=3" alt="" draggable="false">
+      <div class="pointer"><img src="assets/pointer.svg?v=7" alt=""></div>
+      <button id="chance-badge" class="chance-badge">
+        <span class="chance-pill">Шанс <span id="chance-val">5</span>%</span>
+        <span class="chance-info">!</span>
+      </button>
+      <button id="friends-badge" class="chance-badge friends-badge">
+        <span class="chance-pill">+<span id="fr-bonus-pill">2</span> <span id="fr-spin-word">спина</span></span>
+        <span class="chance-info">!</span>
+      </button>
+      <button id="paws-badge" class="chance-badge paws-badge" hidden>
+        <span class="chance-pill"><img class="paw-ic" src="assets/paw.svg?v=1" alt="" draggable="false"><span id="paws-val">0</span>/<span id="paws-need">10</span></span>
+        <span class="chance-info">!</span>
+      </button>
+    </div>
+  </div>
+  <div class="block series-block">
+    <div class="block-label">Серия</div>
+    <div id="series" class="series"></div>
+  </div>
+  <div class="block prizes-block" id="prizes-open">
+    <div id="prizes" class="prizes"></div>
+    <div class="prizes-fade">
+      <span class="prizes-chevron">›</span>
+    </div>
+  </div>
+  <div class="sp sp-b"></div>
+  <div id="spins-left" class="spins-left">
+    <span id="st-spins">Доступно прокрутов: <b id="spins-num">1</b></span>
+    <span id="st-timer" hidden>До бесплатного прокрута: <b id="timer-val"></b></span>
+    <span id="st-frozen" hidden>Серия заморожена — разморозит друг</span>
+  </div>
+  <div class="sp sp-c"></div>
+  <div class="bottom-bar">
+    <button id="btn-offer" class="btn btn-outline btn-offer" hidden><img class="offer-mini" src="assets/spin.svg?v=1" alt="" draggable="false">Прокрут бесплатно</button>
+    <button id="btn-buy-alt" class="btn btn-outline" hidden></button>
+    <button id="btn-spin" class="btn btn-primary">Крутить!</button>
+  </div>
+</section>
+<div id="overlay" class="overlay" hidden></div>
+<div id="modal-win" class="sheet" hidden>
+  <div class="sheet-handle"></div>
+  <div class="win-stage">
+    <div class="win-badge"><span id="win-stars">50</span><span class="star-ic">★</span></div>
+    <div id="win-tgs" class="big-tgs"></div>
+  </div>
+  <div class="m-title">ПОЗДРАВЛЯЕМ!</div>
+  <div class="m-sub">Твой выигрыш – <span id="win-name">Подарок</span></div>
+  <div id="win-paws" class="m-note goal" hidden></div>
+  <div id="win-note" class="m-note">Для получения приза нужно написать любое сообщение <span id="userbot-link" class="link"></span>!</div>
+  <div id="win-note-auto" class="m-note" hidden>Подписка уже оплачена и придёт автоматически в течение минуты — делать ничего не нужно.</div>
+  <div id="win-note-bot" class="m-note" hidden>Нажми «Получить» — бот сам отправит подарок в течение минуты. Не нажмёшь — придёт через несколько минут.</div>
+  <label id="win-wrote" class="wrote"><span id="wrote-box" class="wrote-box"></span>Я написал(а)</label>
+  <div id="win-goal" class="m-note goal" hidden></div>
+  <div class="bottom-bar in-sheet">
+    <button id="btn-exchange" class="btn btn-outline" hidden>Обменять на прокруты</button>
+    <button id="btn-claim" class="btn btn-primary">Получить</button>
+  </div>
+</div>
+<div id="modal-wall" class="sheet" hidden>
+  <div class="sheet-handle"></div>
+  <div id="wall-tgs" class="big-tgs solo"></div>
+  <div class="m-title">ПОДОЖДИТЕ..</div>
+  <div class="m-note">Теперь рулетка доступна бесплатно <b>раз в 2 дня</b>. Пригласи хотя бы 1 друга, чтобы продолжать крутить ежедневно!</div>
+  <div class="m-note dim">Это нужно, чтобы сохранить честную экономику проекта</div>
+  <div class="bottom-bar in-sheet">
+    <button class="btn btn-primary btn-invite">Пригласить друга</button>
+  </div>
+</div>
+<div id="modal-lose" class="sheet" hidden>
+  <div class="sheet-handle"></div>
+  <div id="lose-tgs" class="big-tgs solo"></div>
+  <div class="m-title">УПС..</div>
+  <div class="m-sub">Сегодня не повезло</div>
+  <div id="lose-note" class="m-note">Возвращайся завтра в то же время. Пригласи друга и увеличь свои шансы!</div>
+  <div id="lose-goal" class="m-note goal" hidden></div>
+  <button id="lose-offer" class="offer-card" hidden>
+    <span class="offer-row">
+      <span class="offer-ic"><img src="assets/spin.svg?v=1" alt="" draggable="false"><span class="offer-plus">+1</span></span>
+      <span class="offer-tx"><b class="offer-h">Прокрут бесплатно</b><span class="offer-s">за подписку на партнёра</span></span>
+      <span class="offer-cta">Подписаться</span>
+    </span>
+    <span class="offer-hint" hidden></span>
+  </button>
+  <div class="bottom-bar in-sheet">
+    <button id="btn-buy-lose" class="btn btn-outline" hidden></button>
+    <button class="btn btn-primary btn-invite">Пригласить друга</button>
+  </div>
+</div>
+<div id="modal-lose-once" class="sheet" hidden>
+  <div class="sheet-handle"></div>
+  <div id="lose-once-tgs" class="big-tgs solo"></div>
+  <div class="m-title">УПС..</div>
+  <div class="m-sub">Не повезло</div>
+  <div class="m-note">Пригласи друга и прокрути еще раз! Акция действует 1 раз</div>
+  <div id="lose-once-goal" class="m-note goal" hidden></div>
+  <div class="bottom-bar in-sheet">
+    <button class="btn btn-primary btn-invite">Пригласить друга</button>
+  </div>
+</div>
+<div id="modal-paw" class="sheet" hidden>
+  <div class="sheet-handle"></div>
+  <div class="paw-hero"><img id="paw-hero-img" src="assets/paw.svg?v=1" alt="" draggable="false"></div>
+  <div class="m-title">ЛАПКА!</div>
+  <div class="m-sub">Собрано <span id="paw-have">1</span> из <span id="paw-need">10</span></div>
+  <div id="paw-progress" class="paws-progress"></div>
+  <div id="paw-note" class="m-note">Собери ещё 9 — и мишка твой!</div>
+  <div id="paw-goal" class="m-note goal" hidden></div>
+  <button id="paw-offer" class="offer-card" hidden>
+    <span class="offer-row">
+      <span class="offer-ic"><img src="assets/spin.svg?v=1" alt="" draggable="false"><span class="offer-plus">+1</span></span>
+      <span class="offer-tx"><b class="offer-h">Прокрут бесплатно</b><span class="offer-s">за подписку на партнёра</span></span>
+      <span class="offer-cta">Подписаться</span>
+    </span>
+    <span class="offer-hint" hidden></span>
+  </button>
+  <div class="bottom-bar in-sheet">
+    <button id="btn-buy-paw" class="btn btn-outline" hidden></button>
+    <button class="btn btn-primary btn-invite">Пригласить друга</button>
+  </div>
+</div>
+<div id="modal-offer" class="sheet" hidden>
+  <div class="sheet-handle"></div>
+  <div class="offer-hero"><img id="offer-face" class="face" alt="" draggable="false"><img class="frame" src="assets/wheel-frame.svg?v=3" alt="" draggable="false"><span id="offer-plus" class="offer-plus big">+1</span></div>
+  <div id="offer-title" class="m-title">ПРОКРУТ БЕСПЛАТНО</div>
+  <div id="offer-sub" class="m-sub">Подпишись на партнёра</div>
+  <div id="offer-note" class="m-note">+1 прокрут сразу после подписки</div>
+  <div class="bottom-bar in-sheet">
+    <button id="btn-offer-go" class="btn btn-primary">Подписаться</button>
+    <button id="btn-offer-later" class="btn btn-outline">Не сейчас</button>
+  </div>
+</div>
+<div id="modal-chance" class="sheet" hidden>
+  <div class="sheet-handle"></div>
+  <div class="chance-big accent-text"><span id="chance-big-val">5</span>%</div>
+  <div class="m-sub narrow">Твой общий шанс на выигрыш подарка</div>
+  <div id="chance-boost" class="m-note narrow">Его можно повысить, приглашая друзей</div>
+  <div id="chance-steps" class="chance-steps" hidden></div>
+  <div id="chance-active" class="m-note dim">Считаются только активные друзья: те, кто крутит рулетку хотя бы раз за 5 дней</div>
+  <div id="chance-paws" class="m-note narrow" hidden>А ещё лапки: шанс <b>от <span id="chance-paw-val">5</span>%</b> на каждом прокруте. Собери <span id="chance-paw-need">10</span> — и мишка твой</div>
+  <div id="chance-rare" class="m-note dim" hidden>Premium и NFT на колесе разыгрываются не чаще раза в 2 недели</div>
+  <div class="bottom-bar in-sheet">
+    <button class="btn btn-primary btn-invite">Пригласить друга</button>
+  </div>
+</div>
+<div id="modal-friends" class="sheet" hidden>
+  <div class="sheet-handle"></div>
+  <div class="chance-big accent-text">+<span id="fr-bonus-big">2</span></div>
+  <div class="m-sub narrow"><span id="fr-spin-word-big">прокрута</span> за <span id="fr-every-sub">3</span> приглашённых друзей</div>
+  <div id="fr-progress" class="fr-progress"></div>
+  <div class="m-note narrow">Осталось пригласить: <b id="fr-left">3</b></div>
+  <div id="fr-partner" class="m-note fr-partner" hidden><img class="fr-partner-ic" src="assets/spin.svg?v=1" alt="" draggable="false"><span id="fr-partner-text"></span></div>
+  <div class="m-note dim">Друг засчитывается, когда пройдёт вход и крутанёт колесо хотя бы раз.
+    Награда повторяется: счётчик обнуляется, и всё начинается заново</div>
+  <div class="bottom-bar in-sheet">
+    <button class="btn btn-primary btn-invite">Пригласить друга</button>
+  </div>
+</div>
+<div id="modal-paws" class="sheet" hidden>
+  <div class="sheet-handle"></div>
+  <div class="paw-hero small"><img src="assets/paw.svg?v=1" alt="" draggable="false"></div>
+  <div class="chance-big accent-text"><span id="paws-big">0</span>/<span id="paws-need-big">10</span></div>
+  <div class="m-sub narrow">лапок собрано к мишке</div>
+  <div id="paws-progress" class="paws-progress"></div>
+  <div class="m-note narrow">Лапка выпадает с шансом <b>от <span id="paws-chance">5</span>%</b> на каждом прокруте — это сектора с лапкой на колесе</div>
+  <div class="m-note dim">Собери <span id="paws-need-sub">10</span> — и мишка твой: его можно забрать<span id="paws-exch"> или обменять на прокруты</span></div>
+  <div class="bottom-bar in-sheet">
+    <button class="btn btn-primary btn-invite">Пригласить друга</button>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
